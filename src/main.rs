@@ -1,8 +1,11 @@
+use vulkan::VulkanApp;
+
 mod vulkan;
 
 fn main() {
-    match vulkan::VulkanApp::new() {
-        Ok(app) => app.run(),
-        Err(err) => println!("VulkanApp::new() => {err}"),
+    let mut vulkan_app = VulkanApp::new();
+    match vulkan_app.run() {
+        Err(err) => println!("Err:{err}"),
+        _ => println!("scop closed correctely"),
     }
 }

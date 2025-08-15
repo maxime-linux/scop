@@ -1,13 +1,24 @@
 use std::error::Error;
-use winit;
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::window::Window;
 
-pub struct VulkanApp {}
+mod window;
+
+#[derive(Default)]
+pub struct VulkanApp {
+    window: Option<Window>,
+}
 
 impl VulkanApp {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
-        Ok(Self {})
+    pub fn new() -> Self {
+        VulkanApp::default()
     }
-    pub fn run(&self) {
+
+    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         println!("scop run!");
+        let window_loop = EventLoop::new()?;
+        window_loop.set_control_flow(ControlFlow::Poll);
+        window_loop.run_app(self)?;
+        Ok(())
     }
 }
