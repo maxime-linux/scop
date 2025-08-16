@@ -15,6 +15,15 @@ pub struct VulkanApp {
     instance: Instance,
 }
 
+impl Drop for VulkanApp {
+    fn drop(&mut self) {
+        println!("instance vulkan destroyed");
+        unsafe {
+          self.instance.destroy_instance(None)  
+        };
+    }
+}
+
 impl VulkanApp {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         let entry = unsafe { Entry::load()? };
@@ -46,4 +55,6 @@ impl VulkanApp {
         window_loop.run_app(self)?;
         Ok(())
     }
+
 }
+
