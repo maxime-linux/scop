@@ -1,27 +1,17 @@
-use ash::vk::{make_api_version,InstanceCreateInfo, ApplicationInfo, API_VERSION_1_3};
-use ash::{Entry,Instance};
-
+use ash::{Entry, Instance};
 
 use std::error::Error;
 
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::Window;
 
+mod instance;
 mod window;
 
 pub struct VulkanApp {
     window: Option<Window>,
     entry: Entry,
     instance: Instance,
-}
-
-impl Drop for VulkanApp {
-    fn drop(&mut self) {
-        println!("instance vulkan destroyed");
-        unsafe {
-          self.instance.destroy_instance(None)  
-        };
-    }
 }
 
 impl VulkanApp {
@@ -35,19 +25,6 @@ impl VulkanApp {
         })
     }
 
-    fn create_instance(entry: &Entry) -> Result<Instance, Box<dyn Error>> {
-        let app_info: ApplicationInfo = ApplicationInfo::default();
-        app_info.application_name(c"scop");
-        app_info.application_version(make_api_version(0, 1, 0, 0));
-        app_info.engine_name(c"scop_engine");
-        app_info.engine_version(make_api_version(0, 1, 0, 0));
-        app_info.api_version(API_VERSION_1_3);
-        
-        let instance_create_info = InstanceCreateInfo::default().application_info(&app_info);
-
-        unsafe { Ok(entry.create_instance(&instance_create_info, None)?) }
-    }
-
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         println!("scop run!");
         let window_loop = EventLoop::new()?;
@@ -55,6 +32,4 @@ impl VulkanApp {
         window_loop.run_app(self)?;
         Ok(())
     }
-
 }
-
