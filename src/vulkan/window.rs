@@ -10,7 +10,7 @@ impl ApplicationHandler for VulkanApp {
         self.window = Some(
             event_loop
                 .create_window(Window::default_attributes())
-                .unwrap(),
+                .expect("failed to create default window"),
         );
     }
 

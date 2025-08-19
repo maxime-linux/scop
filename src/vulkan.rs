@@ -15,14 +15,14 @@ pub struct VulkanApp {
 }
 
 impl VulkanApp {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
-        let entry = unsafe { Entry::load()? };
-        let instance = Self::create_instance(&entry)?;
-        Ok(Self {
+    pub fn new() -> Self {
+        let entry = unsafe { Entry::load().expect("failed to create Vulkan entry!") };
+        let instance = Self::create_instance(&entry);
+        Self {
             window: None,
             entry,
             instance,
-        })
+        }
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {

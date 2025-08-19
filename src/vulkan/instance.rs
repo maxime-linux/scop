@@ -1,4 +1,5 @@
 use ash::vk::{make_api_version, ApplicationInfo, InstanceCreateInfo, API_VERSION_1_3};
+
 use ash::{Entry, Instance};
 
 use super::VulkanApp;
@@ -11,7 +12,7 @@ impl Drop for VulkanApp {
 }
 
 impl VulkanApp {
-    pub fn create_instance(entry: &Entry) -> Result<Instance, Box<dyn Error>> {
+    pub fn create_instance(entry: &Entry) -> Instance {
         let app_info: ApplicationInfo = ApplicationInfo::default();
         app_info.application_name(c"scop");
         app_info.application_version(make_api_version(0, 1, 0, 0));
@@ -21,6 +22,6 @@ impl VulkanApp {
 
         let instance_create_info = InstanceCreateInfo::default().application_info(&app_info);
 
-        unsafe { Ok(entry.create_instance(&instance_create_info, None)?) }
+        unsafe { entry.create_instance(&instance_create_info, None).expect("failed to create Vulkan instance!") }
     }
 }
