@@ -1,4 +1,4 @@
-use ash::{Entry, Instance};
+use ash::{ext::debug_utils, vk, Entry, Instance};
 
 use std::error::Error;
 
@@ -10,18 +10,21 @@ mod window;
 
 pub struct VulkanApp {
     window: Option<Window>,
-    entry: Entry,
+    _entry: Entry,
     instance: Instance,
+    _validation_layer: Option<(vk::DebugUtilsMessengerEXT, debug_utils::Instance)>,
 }
 
 impl VulkanApp {
     pub fn new() -> Self {
-        let entry = unsafe { Entry::load().expect("failed to create Vulkan entry!") };
-        let instance = Self::create_instance(&entry);
+        let _entry = unsafe { Entry::load().expect("failed to create Vulkan entry!") };
+        let instance = Self::create_instance(&_entry);
+        let _validation_layer = Self::create_validation_layer(&_entry, &instance);
         Self {
             window: None,
-            entry,
+            _entry,
             instance,
+            _validation_layer,
         }
     }
 
