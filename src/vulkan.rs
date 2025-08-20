@@ -30,9 +30,9 @@ impl VulkanApp {
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         println!("scop run!");
-        let window_loop = EventLoop::new()?;
-        window_loop.set_control_flow(ControlFlow::Poll);
-        window_loop.run_app(self)?;
+        // let window_loop = EventLoop::new()?;
+        // window_loop.set_control_flow(ControlFlow::Poll);
+        // window_loop.run_app(self)?;
         Ok(())
     }
 }

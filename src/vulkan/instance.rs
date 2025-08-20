@@ -8,15 +8,16 @@ use super::VulkanApp;
 
 impl Drop for VulkanApp {
     fn drop(&mut self) {
-        println!("instance vulkan destroyed");
-        unsafe { self.instance.destroy_instance(None) };
         if let Some(debug_utils) = &self._validation_layer {
             unsafe {
                 debug_utils
                     .1
                     .destroy_debug_utils_messenger(debug_utils.0, None)
             }
+            println!("vulkan validation layer destroyed");
         }
+        unsafe { self.instance.destroy_instance(None) };
+        println!("vulkan instance destroyed");
     }
 }
 
@@ -36,9 +37,9 @@ unsafe extern "system" fn vulkan_debug_utils_callback(
 impl VulkanApp {
     pub fn create_instance(entry: &Entry) -> Instance {
         let app_info: vk::ApplicationInfo = vk::ApplicationInfo::default()
-            .application_name(c"scop")
+            // .application_name(c"scop")
             .application_version(vk::make_api_version(0, 1, 0, 0))
-            .engine_name(c"scop_engine")
+            // .engine_name(c"scop_engine")
             .engine_version(vk::make_api_version(0, 1, 0, 0))
             .api_version(vk::API_VERSION_1_3);
 
@@ -70,6 +71,9 @@ impl VulkanApp {
         entry: &Entry,
         instance: &Instance,
     ) -> Option<(vk::DebugUtilsMessengerEXT, debug_utils::Instance)> {
+        if !VALIDATION_LAYERS {
+            return None;
+        }
         let debug_utils = ash::ext::debug_utils::Instance::new(entry, instance);
 
         let debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
