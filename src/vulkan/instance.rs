@@ -99,4 +99,22 @@ impl VulkanApp {
             ))
         }
     }
+
+    pub fn get_physical_device(
+        instance: &Instance,
+    ) -> (vk::PhysicalDevice, vk::PhysicalDeviceProperties) {
+        let devices = unsafe {
+            instance
+                .enumerate_physical_devices()
+                .expect("failed to find a valid physical device")
+        };
+
+        for device in devices {
+            let device_properties = unsafe { instance.get_physical_device_properties(device) };
+            if device_properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU {
+                return (device, device_properties);
+            }
+        }
+        panic!("failed to find a discrete gpu");
+    }
 }
