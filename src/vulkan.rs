@@ -1,4 +1,4 @@
-use ash::{ext::debug_utils, vk, Entry, Instance};
+use ash::{ext::debug_utils, vk, Device, Entry, Instance};
 
 use std::error::Error;
 
@@ -14,6 +14,7 @@ pub struct VulkanApp {
     instance: Instance,
     _validation_layer: Option<(vk::DebugUtilsMessengerEXT, debug_utils::Instance)>,
     physical_device: (vk::PhysicalDevice, vk::PhysicalDeviceProperties),
+    logical_device: Device,
 }
 
 impl VulkanApp {
@@ -22,12 +23,14 @@ impl VulkanApp {
         let instance = Self::create_instance(&_entry);
         let _validation_layer = Self::create_validation_layer(&_entry, &instance);
         let physical_device = Self::get_physical_device(&instance);
+        let logical_device = Self::get_logical_device(&instance, &physical_device);
         Self {
             window: None,
             _entry,
             instance,
             _validation_layer,
             physical_device,
+            logical_device,
         }
     }
 

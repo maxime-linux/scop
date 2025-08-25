@@ -1,6 +1,6 @@
 const VALIDATION_LAYERS: bool = cfg!(debug_assertions);
 
-use ash::{ext::debug_utils, vk, Entry, Instance};
+use ash::{ext::debug_utils, vk, Device, Entry, Instance};
 
 use std::ffi::{c_char, c_void, CStr};
 
@@ -18,6 +18,10 @@ impl Drop for VulkanApp {
         }
         unsafe { self.instance.destroy_instance(None) };
         println!("vulkan instance destroyed");
+        unsafe {
+            self.logical_device.destroy_device(None);
+        }
+        println!("vulkan logical device detroyed");
     }
 }
 
@@ -43,7 +47,7 @@ impl VulkanApp {
             .engine_version(vk::make_api_version(0, 1, 0, 0))
             .api_version(vk::API_VERSION_1_3);
 
-        let layer: Vec<*const c_char> = if VALIDATION_LAYERS {
+        let layer_name: Vec<*const c_char> = if VALIDATION_LAYERS {
             vec![c"VK_LAYER_KHRONOS_validation".as_ptr()]
         } else {
             vec![]
@@ -57,7 +61,7 @@ impl VulkanApp {
 
         let instance_create_info = vk::InstanceCreateInfo::default()
             .application_info(&app_info)
-            .enabled_layer_names(&layer)
+            .enabled_layer_names(&layer_name)
             .enabled_extension_names(&extension);
 
         unsafe {
@@ -116,5 +120,50 @@ impl VulkanApp {
             }
         }
         panic!("failed to find a discrete gpu");
+    }
+
+    pub fn get_logical_device(
+        instance: &Instance,
+        physical_device: &(vk::PhysicalDevice, vk::PhysicalDeviceProperties),
+    ) -> Device {
+        let queue_family_properties =
+            unsafe { instance.get_physical_device_queue_family_properties(physical_device.0) };
+        let queue_family_indices = {
+            let mut found_graphic = None;
+            let mut found_transfer = None;
+            for (i, queue_family) in queue_family_properties.iter().enumerate() {
+                if queue_family.queue_count > 0
+                    && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+                {
+                    found_graphic = Some(i as u32);
+                }
+                if queue_family.queue_count > 0
+                    && queue_family.queue_flags.contains(vk::QueueFlags::TRANSFER)
+                    && (found_transfer.is_none()
+                        || !queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS))
+                {
+                    found_transfer = Some(i as u32);
+                }
+            }
+            (found_graphic.unwrap(), found_transfer.unwrap())
+        };
+        let priorities: [f32; 1] = [1.0];
+        let queue_infos = [
+            vk::DeviceQueueCreateInfo::default()
+                .queue_family_index(queue_family_indices.0)
+                .queue_priorities(&priorities),
+            vk::DeviceQueueCreateInfo::default()
+                .queue_family_index(queue_family_indices.1)
+                .queue_priorities(&priorities),
+        ];
+        let device_create_info = vk::DeviceCreateInfo::default().queue_create_infos(&queue_infos);
+        let logical_device = unsafe {
+            instance
+                .create_device(physical_device.0, &device_create_info, None)
+                .expect("failed to create vulkan logical device")
+        };
+        let _graphic_queue = unsafe { logical_device.get_device_queue(queue_family_indices.0, 0) };
+        let _transfer_queue = unsafe { logical_device.get_device_queue(queue_family_indices.1, 0) };
+        logical_device
     }
 }
