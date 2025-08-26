@@ -1,8 +1,6 @@
 use std::error::Error;
 
-const VALIDATION_LAYERS: bool = cfg!(debug_assertions);
-
-use ash::{ext::debug_utils, vk, Entry};
+use ash::{vk, Entry};
 
 use std::ffi::{c_char, c_void, CStr};
 
@@ -29,19 +27,26 @@ fn main() -> Result<(), Box<dyn Error>> {
         .engine_version(vk::make_api_version(0, 1, 0, 0))
         .api_version(vk::API_VERSION_1_3);
 
-    let layer_name: Vec<*const c_char> = if VALIDATION_LAYERS {
-        vec![c"VK_LAYER_KHRONOS_validation".as_ptr()]
-    } else {
-        vec![]
-    };
+    let layer_name: Vec<*const c_char> = vec![c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
-    let extension: Vec<*const c_char> = if VALIDATION_LAYERS {
-        vec![ash::ext::debug_utils::NAME.as_ptr()]
-    } else {
-        vec![]
-    };
+    let extension: Vec<*const c_char> = vec![ash::ext::debug_utils::NAME.as_ptr()];
+
+    let mut debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
+        .message_severity(
+            vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
+                | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+                | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
+                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
+        )
+        .message_type(
+            vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
+                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
+                | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
+        )
+        .pfn_user_callback(Some(vulkan_debug_utils_callback));
 
     let instance_create_info = vk::InstanceCreateInfo::default()
+        .push_next(&mut debug_create_info)
         .application_info(&app_info)
         .enabled_layer_names(&layer_name)
         .enabled_extension_names(&extension);
@@ -51,99 +56,88 @@ fn main() -> Result<(), Box<dyn Error>> {
             .create_instance(&instance_create_info, None)
             .expect("failed to create Vulkan instance!")
     };
-    let mut debug_instance: Option<debug_utils::Instance> = None;
-    let mut debug_message: Option<vk::DebugUtilsMessengerEXT> = None;
-    let mut debug_create_info: Option<vk::DebugUtilsMessengerCreateInfoEXT> = None;
-    if VALIDATION_LAYERS {
-        debug_instance = Some(ash::ext::debug_utils::Instance::new(&entry, &instance));
 
-        debug_create_info = Some(
-            vk::DebugUtilsMessengerCreateInfoEXT::default()
-                .message_severity(
-                    vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                        | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
-                        | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
-                        | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
-                )
-                .message_type(
-                    vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
-                        | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
-                        | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
-                )
-                .pfn_user_callback(Some(vulkan_debug_utils_callback)),
-        );
+    let mut debug_instance = ash::ext::debug_utils::Instance::new(&entry, &instance);
+    let mut debug_message = unsafe {
+        debug_instance
+            .create_debug_utils_messenger(&debug_create_info, None)
+            .expect("failed to create vulkan validation layers")
+    };
 
-        debug_message = unsafe {
-            Some(
-                debug_instance
-                    .unwrap()
-                    .create_debug_utils_messenger(&debug_create_info.unwrap(), None)
-                    .expect("failed to create vulkan validation layers"),
-            )
-        };
-
+    let (physical_device, physical_device_properties) = {
         let physical_devices = unsafe {
             instance
                 .enumerate_physical_devices()
                 .expect("failed to find a valid physical device")
         };
+        physical_devices
+            .into_iter()
+            .map(|device| {
+                let device_properties = unsafe { instance.get_physical_device_properties(device) };
+                (device, device_properties)
+            })
+            .max_by_key(|(_, properties)| match properties.device_type {
+                vk::PhysicalDeviceType::DISCRETE_GPU => 3,
+                vk::PhysicalDeviceType::INTEGRATED_GPU => 2,
+                vk::PhysicalDeviceType::VIRTUAL_GPU => 1,
+                _ => 0,
+            })
+            .expect("no valable physical device found")
+    };
 
-        let mut physical_device: Option<vk::PhysicalDevice> = None;
-        let mut physical_device_properties: Option<vk::PhysicalDeviceProperties> = None;
+    let queue_family_properties =
+        unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
 
-        for i in physical_devices {
-            let device_properties = unsafe { instance.get_physical_device_properties(i) };
-            if device_properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU {
-                physical_device = Some(i);
-                physical_device_properties = Some(device_properties);
-                break;
+    let queue_family_indices = {
+        let mut found_graphic = None;
+
+        let mut found_transfer = None;
+
+        for (i, queue_family) in queue_family_properties.iter().enumerate() {
+            if queue_family.queue_count > 0
+                && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
+            {
+                found_graphic = Some(i as u32);
+            }
+            if queue_family.queue_count > 0
+                && queue_family.queue_flags.contains(vk::QueueFlags::TRANSFER)
+                && (found_transfer.is_none()
+                    || !queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS))
+            {
+                found_transfer = Some(i as u32);
             }
         }
+        (found_graphic.unwrap(), found_transfer.unwrap())
+    };
 
-        let queue_family_properties = unsafe {
-            instance.get_physical_device_queue_family_properties(physical_device.unwrap())
-        };
-        let queue_family_indices = {
-            let mut found_graphic = None;
-            let mut found_transfer = None;
-            for (i, queue_family) in queue_family_properties.iter().enumerate() {
-                if queue_family.queue_count > 0
-                    && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
-                {
-                    found_graphic = Some(i as u32);
-                }
-                if queue_family.queue_count > 0
-                    && queue_family.queue_flags.contains(vk::QueueFlags::TRANSFER)
-                    && (found_transfer.is_none()
-                        || !queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS))
-                {
-                    found_transfer = Some(i as u32);
-                }
-            }
-            (found_graphic.unwrap(), found_transfer.unwrap())
-        };
-        let priorities: [f32; 1] = [1.0];
-        let queue_infos = [
-            vk::DeviceQueueCreateInfo::default()
-                .queue_family_index(queue_family_indices.0)
-                .queue_priorities(&priorities),
-            vk::DeviceQueueCreateInfo::default()
-                .queue_family_index(queue_family_indices.1)
-                .queue_priorities(&priorities),
-        ];
-        let device_create_info = vk::DeviceCreateInfo::default().queue_create_infos(&queue_infos);
-        let logical_device = unsafe {
-            instance
-                .create_device(physical_device.unwrap(), &device_create_info, None)
-                .expect("failed to create vulkan logical device")
-        };
-        let _graphic_queue = unsafe { logical_device.get_device_queue(queue_family_indices.0, 0) };
-        let _transfer_queue = unsafe { logical_device.get_device_queue(queue_family_indices.1, 0) };
+    let priorities: [f32; 1] = [1.0];
 
-        unsafe {
-            logical_device.destroy_device(None);
-            instance.destroy_instance(None);
-        }
+    let queue_infos = [
+        vk::DeviceQueueCreateInfo::default()
+            .queue_family_index(queue_family_indices.0)
+            .queue_priorities(&priorities),
+        vk::DeviceQueueCreateInfo::default()
+            .queue_family_index(queue_family_indices.1)
+            .queue_priorities(&priorities),
+    ];
+
+    let device_create_info = vk::DeviceCreateInfo::default().queue_create_infos(&queue_infos);
+
+    let logical_device = unsafe {
+        instance
+            .create_device(physical_device, &device_create_info, None)
+            .expect("failed to create vulkan logical device")
+    };
+
+    let graphic_queue = unsafe { logical_device.get_device_queue(queue_family_indices.0, 0) };
+
+    let transfer_queue = unsafe { logical_device.get_device_queue(queue_family_indices.1, 0) };
+
+    unsafe {
+        debug_instance.destroy_debug_utils_messenger(debug_message, None);
+        logical_device.destroy_device(None);
+        instance.destroy_instance(None);
     }
+
     Ok(())
 }
