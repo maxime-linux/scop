@@ -1,18 +1,15 @@
 use winit::{application::ApplicationHandler, window::Window};
 
-#[derive(Default)]
-pub struct App {
-    pub window: Option<Window>,
-}
+use super::Scop;
 
-impl ApplicationHandler for App {
+impl ApplicationHandler for Scop {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         if self.window.is_none() {
-            self.window = Some(
-                event_loop
-                    .create_window(Window::default_attributes())
-                    .expect("failed to create winit window !"),
-            );
+            let window = event_loop
+                .create_window(Window::default_attributes())
+                .expect("failed to create winit window !");
+
+            self.window = Some(window);
         }
     }
 

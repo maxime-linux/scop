@@ -1,152 +1,26 @@
 use std::error::Error;
 
-use ash::{vk, Entry};
+use winit::{event_loop::EventLoop, raw_window_handle::HasDisplayHandle};
 
-use winit::{
-    application::ApplicationHandler,
-    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
-};
+use std::ffi::c_char;
 
-use ash_window;
-
+mod vulkan;
 mod window;
 
-use std::ffi::{c_char, c_void, CStr};
-
-unsafe extern "system" fn vulkan_debug_utils_callback(
-    msg_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
-    msg_type: vk::DebugUtilsMessageTypeFlagsEXT,
-    callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
-    _: *mut c_void,
-) -> vk::Bool32 {
-    let message = unsafe { CStr::from_ptr((*callback_data).p_message) };
-    let severity = format!("{:?}", msg_severity).to_lowercase();
-    let ty = format!("{:?}", msg_type).to_lowercase();
-    eprintln!("[Debug][{}][{}] {:?}", severity, ty, message);
-    vk::FALSE
-}
-
 fn main() -> Result<(), Box<dyn Error>> {
-    let entry = unsafe { Entry::load().expect("failed to create Vulkan entry!") };
+    let event_loop = EventLoop::new()?;
 
-    let app_info: vk::ApplicationInfo = vk::ApplicationInfo::default()
-        // .application_name(c"scop")
-        .application_version(vk::make_api_version(0, 1, 0, 0))
-        // .engine_name(c"scop_engine")
-        .engine_version(vk::make_api_version(0, 1, 0, 0))
-        .api_version(vk::API_VERSION_1_3);
+    let extension_platform =
+        ash_window::enumerate_required_extensions(event_loop.display_handle().unwrap().as_raw())?;
 
-    let layer_name: Vec<*const c_char> = vec![c"VK_LAYER_KHRONOS_validation".as_ptr()];
+    let mut extensions: Vec<*const c_char> = extension_platform.to_vec();
+    extensions.push(ash::ext::debug_utils::NAME.as_ptr());
 
-    let extension: Vec<*const c_char> = vec![ash::ext::debug_utils::NAME.as_ptr()];
+    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
-    let mut debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
-        .message_severity(
-            vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-                | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
-                | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
-                | vk::DebugUtilsMessageSeverityFlagsEXT::ERROR,
-        )
-        .message_type(
-            vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
-                | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
-                | vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION,
-        )
-        .pfn_user_callback(Some(vulkan_debug_utils_callback));
+    // let mut scop: Scop = Scop::default();
 
-    let instance_create_info = vk::InstanceCreateInfo::default()
-        .push_next(&mut debug_create_info)
-        .application_info(&app_info)
-        .enabled_layer_names(&layer_name)
-        .enabled_extension_names(&extension);
+    event_loop.run_app(&mut scop);
 
-    let instance = unsafe {
-        entry
-            .create_instance(&instance_create_info, None)
-            .expect("failed to create Vulkan instance!")
-    };
-
-    let mut debug_instance = ash::ext::debug_utils::Instance::new(&entry, &instance);
-
-    let mut debug_message = unsafe {
-        debug_instance
-            .create_debug_utils_messenger(&debug_create_info, None)
-            .expect("failed to create vulkan validation layers")
-    };
-
-    let (physical_device, physical_device_properties) = {
-        let physical_devices = unsafe {
-            instance
-                .enumerate_physical_devices()
-                .expect("failed to find a valid physical device")
-        };
-        physical_devices
-            .into_iter()
-            .map(|device| {
-                let device_properties = unsafe { instance.get_physical_device_properties(device) };
-                (device, device_properties)
-            })
-            .max_by_key(|(_, properties)| match properties.device_type {
-                vk::PhysicalDeviceType::DISCRETE_GPU => 3,
-                vk::PhysicalDeviceType::INTEGRATED_GPU => 2,
-                vk::PhysicalDeviceType::VIRTUAL_GPU => 1,
-                _ => 0,
-            })
-            .expect("no valable physical device found")
-    };
-
-    let queue_family_properties =
-        unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
-
-    let queue_family_indices = {
-        let mut found_graphic = None;
-
-        let mut found_transfer = None;
-
-        for (i, queue_family) in queue_family_properties.iter().enumerate() {
-            if queue_family.queue_count > 0
-                && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
-            {
-                found_graphic = Some(i as u32);
-            }
-            if queue_family.queue_count > 0
-                && queue_family.queue_flags.contains(vk::QueueFlags::TRANSFER)
-                && (found_transfer.is_none()
-                    || !queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS))
-            {
-                found_transfer = Some(i as u32);
-            }
-        }
-        (found_graphic.unwrap(), found_transfer.unwrap())
-    };
-
-    let priorities: [f32; 1] = [1.0];
-
-    let queue_infos = [
-        vk::DeviceQueueCreateInfo::default()
-            .queue_family_index(queue_family_indices.0)
-            .queue_priorities(&priorities),
-        vk::DeviceQueueCreateInfo::default()
-            .queue_family_index(queue_family_indices.1)
-            .queue_priorities(&priorities),
-    ];
-
-    let device_create_info = vk::DeviceCreateInfo::default().queue_create_infos(&queue_infos);
-
-    let logical_device = unsafe {
-        instance
-            .create_device(physical_device, &device_create_info, None)
-            .expect("failed to create vulkan logical device")
-    };
-
-    let graphic_queue = unsafe { logical_device.get_device_queue(queue_family_indices.0, 0) };
-
-    let transfer_queue = unsafe { logical_device.get_device_queue(queue_family_indices.1, 0) };
-
-    unsafe {
-        debug_instance.destroy_debug_utils_messenger(debug_message, None);
-        logical_device.destroy_device(None);
-        instance.destroy_instance(None);
-    }
     Ok(())
 }
