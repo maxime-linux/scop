@@ -2,6 +2,15 @@ use std::error::Error;
 
 use ash::{vk, Entry};
 
+use winit::{
+    application::ApplicationHandler,
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
+};
+
+use ash_window;
+
+mod window;
+
 use std::ffi::{c_char, c_void, CStr};
 
 unsafe extern "system" fn vulkan_debug_utils_callback(
@@ -58,6 +67,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let mut debug_instance = ash::ext::debug_utils::Instance::new(&entry, &instance);
+
     let mut debug_message = unsafe {
         debug_instance
             .create_debug_utils_messenger(&debug_create_info, None)
@@ -138,6 +148,5 @@ fn main() -> Result<(), Box<dyn Error>> {
         logical_device.destroy_device(None);
         instance.destroy_instance(None);
     }
-
     Ok(())
 }
