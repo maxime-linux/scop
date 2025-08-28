@@ -1,26 +1,23 @@
-use std::error::Error;
-
 use ash::{ext::debug_utils, khr::surface, vk, Device, Entry, Instance};
 
-use ash_window;
+use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
-use winit::{event_loop::EventLoop, raw_window_handle::HasDisplayHandle, window::Window};
+use winit::window::Window;
 
 use std::ffi::{c_char, c_void, CStr};
 
-mod window;
+use std::error::Error;
 
 struct DebugUtils {
     instance: debug_utils::Instance,
     message: vk::DebugUtilsMessengerEXT,
 }
 
-pub struct Scop {
+pub struct VulkanCore {
     entry: Entry,
     instance: Instance,
     logical_device: Device,
     debug: DebugUtils,
-    window: Option<Window>,
     surface: vk::SurfaceKHR,
     surface_loader: surface::Instance,
 }
@@ -37,8 +34,9 @@ unsafe extern "system" fn vulkan_debug_utils_callback(
     eprintln!("[Debug][{}][{}] {:?}", severity, ty, message);
     vk::FALSE
 }
-impl Scop {
-    fn new(extensions: &[*const c_char], window: Window) {
+
+impl VulkanCore {
+    pub fn new(window: &Window) -> Result<Self, Box<dyn Error>> {
         let entry = unsafe { Entry::load().expect("failed to create Vulkan entry!") };
 
         let app_info: vk::ApplicationInfo = vk::ApplicationInfo::default()
@@ -49,6 +47,12 @@ impl Scop {
             .api_version(vk::API_VERSION_1_3);
 
         let layer_name: Vec<*const c_char> = vec![c"VK_LAYER_KHRONOS_validation".as_ptr()];
+
+        let extension_platform =
+            ash_window::enumerate_required_extensions(window.display_handle()?.as_raw())?;
+
+        let mut extensions: Vec<*const c_char> = extension_platform.to_vec();
+        extensions.push(ash::ext::debug_utils::NAME.as_ptr());
 
         let mut debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
             .message_severity(
@@ -106,19 +110,17 @@ impl Scop {
                 .expect("no valable physical device found")
         };
 
-        let window = event_loop
-            .create_window(Window::default_attributes())
-            .expect("failed to create winit window !");
         let surface = unsafe {
             ash_window::create_surface(
-                &self.entry,
-                &self.instance,
-                window.display_handle().unwrap().as_raw(),
-                window.window_handle().unwrap().as_raw(),
+                &entry,
+                &instance,
+                window.display_handle()?.as_raw(),
+                window.window_handle()?.as_raw(),
                 None,
             )
             .expect("failed to create surface")
         };
+
         let surface_loader = ash::khr::surface::Instance::new(&entry, &instance);
 
         let queue_family_properties =
@@ -132,14 +134,17 @@ impl Scop {
             for (i, queue_family) in queue_family_properties.iter().enumerate() {
                 if queue_family.queue_count > 0
                     && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
-                    && surface_loader.get_physical_device_surface_support(
-                        physical_device,
-                        i as u32,
-                        surface,
-                    )
+                    && unsafe {
+                        surface_loader.get_physical_device_surface_support(
+                            physical_device,
+                            i as u32,
+                            surface,
+                        )?
+                    }
                 {
                     found_graphic = Some(i as u32);
                 }
+
                 if queue_family.queue_count > 0
                     && queue_family.queue_flags.contains(vk::QueueFlags::TRANSFER)
                     && (found_transfer.is_none()
@@ -173,14 +178,25 @@ impl Scop {
         let graphic_queue = unsafe { logical_device.get_device_queue(queue_family_indices.0, 0) };
 
         let transfer_queue = unsafe { logical_device.get_device_queue(queue_family_indices.1, 0) };
+
+        Ok(Self {
+            entry,
+            instance,
+            logical_device,
+            debug: DebugUtils {
+                instance: debug_instance,
+                message: debug_message,
+            },
+            surface,
+            surface_loader,
+        })
     }
 }
 
-impl Drop for Scop {
+impl Drop for VulkanCore {
     fn drop(&mut self) {
         unsafe {
-            self.surface_loader
-                .destroy_surface(self.surface.unwrap(), None);
+            self.surface_loader.destroy_surface(self.surface, None);
             self.debug
                 .instance
                 .destroy_debug_utils_messenger(self.debug.message, None);
