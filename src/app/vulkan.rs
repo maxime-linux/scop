@@ -13,13 +13,23 @@ struct DebugUtils {
     message: vk::DebugUtilsMessengerEXT,
 }
 
+struct Surface {
+    raw: vk::SurfaceKHR,
+    loader: surface::Instance,
+}
+
+struct Swapchain {
+    raw: vk::SwapchainKHR,
+    loader: ash::khr::swapchain::Device,
+}
+
 pub struct VulkanCore {
     entry: Entry,
     instance: Instance,
     logical_device: Device,
     debug: DebugUtils,
-    surface: vk::SurfaceKHR,
-    surface_loader: surface::Instance,
+    surface: Surface,
+    swapchain: Swapchain,
 }
 
 unsafe extern "system" fn vulkan_debug_utils_callback(
@@ -48,11 +58,9 @@ impl VulkanCore {
 
         let layer_name: Vec<*const c_char> = vec![c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
-        let extension_platform =
-            ash_window::enumerate_required_extensions(window.display_handle()?.as_raw())?;
-
-        let mut extensions: Vec<*const c_char> = extension_platform.to_vec();
-        extensions.push(ash::ext::debug_utils::NAME.as_ptr());
+        let mut instance_extensions: Vec<*const c_char> =
+            ash_window::enumerate_required_extensions(window.display_handle()?.as_raw())?.to_vec();
+        instance_extensions.push(ash::ext::debug_utils::NAME.as_ptr());
 
         let mut debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
             .message_severity(
@@ -72,7 +80,7 @@ impl VulkanCore {
             .push_next(&mut debug_create_info)
             .application_info(&app_info)
             .enabled_layer_names(&layer_name)
-            .enabled_extension_names(&extensions);
+            .enabled_extension_names(&instance_extensions);
 
         let instance = unsafe {
             entry
@@ -167,7 +175,11 @@ impl VulkanCore {
                 .queue_priorities(&priorities),
         ];
 
-        let device_create_info = vk::DeviceCreateInfo::default().queue_create_infos(&queue_infos);
+        let device_extensions: Vec<*const c_char> = vec![vk::KHR_SWAPCHAIN_NAME.as_ptr()];
+
+        let device_create_info = vk::DeviceCreateInfo::default()
+            .queue_create_infos(&queue_infos)
+            .enabled_extension_names(&device_extensions);
 
         let logical_device = unsafe {
             instance
@@ -179,6 +191,41 @@ impl VulkanCore {
 
         let transfer_queue = unsafe { logical_device.get_device_queue(queue_family_indices.1, 0) };
 
+        let surface_capabilities = unsafe {
+            surface_loader.get_physical_device_surface_capabilities(physical_device, surface)?
+        };
+
+        let surface_present_modes = unsafe {
+            surface_loader.get_physical_device_surface_present_modes(physical_device, surface)?
+        };
+
+        let surface_formats = unsafe {
+            surface_loader.get_physical_device_surface_formats(physical_device, surface)?
+        };
+
+        let queue_family = [queue_family_indices.0];
+
+        let swapchain_create_info = vk::SwapchainCreateInfoKHR::default()
+            .surface(surface)
+            .min_image_count(
+                3.max(surface_capabilities.min_image_count)
+                    .min(surface_capabilities.max_image_count),
+            )
+            .image_format(surface_formats.first().unwrap().format)
+            .image_color_space(surface_formats.first().unwrap().color_space)
+            .image_extent(surface_capabilities.current_extent)
+            .image_array_layers(1)
+            .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+            .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
+            .queue_family_indices(&queue_family)
+            .pre_transform(surface_capabilities.current_transform)
+            .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+            .present_mode(vk::PresentModeKHR::IMMEDIATE);
+
+        let swapchain_loader = ash::khr::swapchain::Device::new(&instance, &logical_device);
+
+        let swapchain = unsafe { swapchain_loader.create_swapchain(&swapchain_create_info, None)? };
+
         Ok(Self {
             entry,
             instance,
@@ -187,8 +234,14 @@ impl VulkanCore {
                 instance: debug_instance,
                 message: debug_message,
             },
-            surface,
-            surface_loader,
+            surface: Surface {
+                raw: surface,
+                loader: surface_loader,
+            },
+            swapchain: Swapchain {
+                raw: swapchain,
+                loader: swapchain_loader,
+            },
         })
     }
 }
@@ -196,11 +249,18 @@ impl VulkanCore {
 impl Drop for VulkanCore {
     fn drop(&mut self) {
         unsafe {
-            self.surface_loader.destroy_surface(self.surface, None);
+            self.swapchain
+                .loader
+                .destroy_swapchain(self.swapchain.raw, None);
+
+            self.surface.loader.destroy_surface(self.surface.raw, None);
+
             self.debug
                 .instance
                 .destroy_debug_utils_messenger(self.debug.message, None);
+
             self.logical_device.destroy_device(None);
+
             self.instance.destroy_instance(None);
         }
     }

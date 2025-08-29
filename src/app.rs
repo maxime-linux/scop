@@ -34,7 +34,7 @@ impl ApplicationHandler for Scop {
         match event {
             RedrawRequested => {
                 println!("Hello World!");
-                self.window.as_ref().unwrap().request_redraw();
+                // self.window.as_ref().unwrap().request_redraw();
             }
 
             CloseRequested => event_loop.exit(),
