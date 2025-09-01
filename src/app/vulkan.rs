@@ -21,6 +21,7 @@ struct Surface {
 struct Swapchain {
     raw: vk::SwapchainKHR,
     loader: ash::khr::swapchain::Device,
+    images_view: Vec<vk::ImageView>,
 }
 
 pub struct VulkanCore {
@@ -226,6 +227,28 @@ impl VulkanCore {
 
         let swapchain = unsafe { swapchain_loader.create_swapchain(&swapchain_create_info, None)? };
 
+        let swapchain_images = unsafe { swapchain_loader.get_swapchain_images(swapchain)? };
+
+        let mut swapchain_images_views = Vec::with_capacity(swapchain_images.len());
+
+        for image in swapchain_images.iter() {
+            let subresource_range = vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1);
+
+            let images_view_create_info = vk::ImageViewCreateInfo::default()
+                .image(*image)
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .format(vk::Format::B8G8R8A8_UNORM)
+                .subresource_range(subresource_range);
+            let images_view =
+                unsafe { logical_device.create_image_view(&images_view_create_info, None) }?;
+            swapchain_images_views.push(images_view);
+        }
+
         Ok(Self {
             entry,
             instance,
@@ -241,6 +264,7 @@ impl VulkanCore {
             swapchain: Swapchain {
                 raw: swapchain,
                 loader: swapchain_loader,
+                images_view: swapchain_images_views,
             },
         })
     }
@@ -249,6 +273,10 @@ impl VulkanCore {
 impl Drop for VulkanCore {
     fn drop(&mut self) {
         unsafe {
+            for image in self.swapchain.images_view.iter() {
+                self.logical_device.destroy_image_view(*image, None);
+            }
+
             self.swapchain
                 .loader
                 .destroy_swapchain(self.swapchain.raw, None);
