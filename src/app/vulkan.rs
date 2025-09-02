@@ -206,22 +206,42 @@ impl VulkanCore {
 
         let queue_family = [queue_family_indices.0];
 
+        let image_count = if surface_capabilities.max_image_count == 0 {
+            3.max(surface_capabilities.min_image_count)
+        } else {
+            3.max(surface_capabilities.min_image_count)
+                .min(surface_capabilities.max_image_count)
+        };
+
+        let swapchain_extent = if surface_capabilities.current_extent.width != u32::MAX {
+            surface_capabilities.current_extent
+        } else {
+            vk::Extent2D {
+                // clamp 100.clamp(50, 200) clamp check si la value est bien entre les deux value donner
+                width: window.inner_size().width.clamp(
+                    surface_capabilities.min_image_extent.width,
+                    surface_capabilities.max_image_extent.width,
+                ),
+                height: window.inner_size().height.clamp(
+                    surface_capabilities.min_image_extent.height,
+                    surface_capabilities.max_image_extent.height,
+                ),
+            }
+        };
+
         let swapchain_create_info = vk::SwapchainCreateInfoKHR::default()
             .surface(surface)
-            .min_image_count(
-                3.max(surface_capabilities.min_image_count)
-                    .min(surface_capabilities.max_image_count),
-            )
+            .min_image_count(image_count)
             .image_format(surface_formats.first().unwrap().format)
             .image_color_space(surface_formats.first().unwrap().color_space)
-            .image_extent(surface_capabilities.current_extent)
+            .image_extent(swapchain_extent)
             .image_array_layers(1)
             .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
             .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
             .queue_family_indices(&queue_family)
             .pre_transform(surface_capabilities.current_transform)
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
-            .present_mode(vk::PresentModeKHR::IMMEDIATE);
+            .present_mode(vk::PresentModeKHR::MAILBOX);
 
         let swapchain_loader = ash::khr::swapchain::Device::new(&instance, &logical_device);
 
@@ -242,7 +262,7 @@ impl VulkanCore {
             let images_view_create_info = vk::ImageViewCreateInfo::default()
                 .image(*image)
                 .view_type(vk::ImageViewType::TYPE_2D)
-                .format(vk::Format::B8G8R8A8_UNORM)
+                .format(surface_formats.first().unwrap().format)
                 .subresource_range(subresource_range);
             let images_view =
                 unsafe { logical_device.create_image_view(&images_view_create_info, None) }?;
