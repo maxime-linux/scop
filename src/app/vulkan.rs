@@ -1,4 +1,4 @@
-use ash::{ext::debug_utils, khr::surface, vk, Device, Entry, Instance};
+use ash::{ext::debug_utils, khr::surface, vk, Entry, Instance};
 
 use winit::raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
@@ -18,6 +18,15 @@ struct Surface {
     loader: surface::Instance,
 }
 
+struct Device {
+    graphic_queue: vk::Queue,
+    transfer_queue: vk::Queue,
+    graphic_family_index: u32,
+    transfer_family_index: u32,
+    logical: ash::Device,
+    physical: vk::PhysicalDevice,
+}
+
 struct Swapchain {
     raw: vk::SwapchainKHR,
     loader: ash::khr::swapchain::Device,
@@ -27,9 +36,9 @@ struct Swapchain {
 pub struct VulkanCore {
     entry: Entry,
     instance: Instance,
-    logical_device: Device,
     debug: DebugUtils,
     surface: Surface,
+    device: Device,
     swapchain: Swapchain,
 }
 
@@ -48,7 +57,24 @@ unsafe extern "system" fn vulkan_debug_utils_callback(
 
 impl VulkanCore {
     pub fn new(window: &Window) -> Result<Self, Box<dyn Error>> {
-        let entry = unsafe { Entry::load().expect("failed to create Vulkan entry!") };
+        let (entry, instance, debug) = Self::create_vulkan_base(window)?;
+        let surface = Self::create_vulkan_surface(window, &entry, &instance)?;
+        let device = Self::create_vulkan_device(&instance, &surface)?;
+        let swapchain = Self::create_vulkan_swapchain(window, &instance, &surface, &device)?;
+        Ok(Self {
+            entry,
+            instance,
+            debug,
+            surface,
+            device,
+            swapchain,
+        })
+    }
+
+    fn create_vulkan_base(
+        window: &Window,
+    ) -> Result<(Entry, Instance, DebugUtils), Box<dyn Error>> {
+        let entry = unsafe { Entry::load()? };
 
         let app_info: vk::ApplicationInfo = vk::ApplicationInfo::default()
             // .application_name(c"scop")
@@ -91,18 +117,49 @@ impl VulkanCore {
 
         let mut debug_instance = ash::ext::debug_utils::Instance::new(&entry, &instance);
 
-        let mut debug_message = unsafe {
-            debug_instance
-                .create_debug_utils_messenger(&debug_create_info, None)
-                .expect("failed to create vulkan validation layers")
+        let mut debug_message =
+            unsafe { debug_instance.create_debug_utils_messenger(&debug_create_info, None)? };
+
+        Ok((
+            entry,
+            instance,
+            DebugUtils {
+                instance: debug_instance,
+                message: debug_message,
+            },
+        ))
+    }
+
+    fn create_vulkan_surface(
+        window: &Window,
+        entry: &Entry,
+        instance: &Instance,
+    ) -> Result<Surface, Box<dyn Error>> {
+        let surface = unsafe {
+            ash_window::create_surface(
+                entry,
+                instance,
+                window.display_handle()?.as_raw(),
+                window.window_handle()?.as_raw(),
+                None,
+            )?
         };
 
+        let surface_loader = ash::khr::surface::Instance::new(entry, instance);
+
+        Ok(Surface {
+            raw: surface,
+            loader: surface_loader,
+        })
+    }
+
+    fn create_vulkan_device(
+        instance: &Instance,
+        surface: &Surface,
+    ) -> Result<Device, Box<dyn Error>> {
         let (physical_device, physical_device_properties) = {
-            let physical_devices = unsafe {
-                instance
-                    .enumerate_physical_devices()
-                    .expect("failed to find a valid physical device")
-            };
+            let physical_devices = unsafe { instance.enumerate_physical_devices()? };
+
             physical_devices
                 .into_iter()
                 .map(|device| {
@@ -116,26 +173,13 @@ impl VulkanCore {
                     vk::PhysicalDeviceType::VIRTUAL_GPU => 1,
                     _ => 0,
                 })
-                .expect("no valable physical device found")
+                .expect("No physical device found")
         };
-
-        let surface = unsafe {
-            ash_window::create_surface(
-                &entry,
-                &instance,
-                window.display_handle()?.as_raw(),
-                window.window_handle()?.as_raw(),
-                None,
-            )
-            .expect("failed to create surface")
-        };
-
-        let surface_loader = ash::khr::surface::Instance::new(&entry, &instance);
 
         let queue_family_properties =
             unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
 
-        let queue_family_indices = {
+        let (graphic_family_index, transfer_family_index) = {
             let mut found_graphic = None;
 
             let mut found_transfer = None;
@@ -144,10 +188,10 @@ impl VulkanCore {
                 if queue_family.queue_count > 0
                     && queue_family.queue_flags.contains(vk::QueueFlags::GRAPHICS)
                     && unsafe {
-                        surface_loader.get_physical_device_surface_support(
+                        surface.loader.get_physical_device_surface_support(
                             physical_device,
                             i as u32,
-                            surface,
+                            surface.raw,
                         )?
                     }
                 {
@@ -169,10 +213,10 @@ impl VulkanCore {
 
         let queue_infos = [
             vk::DeviceQueueCreateInfo::default()
-                .queue_family_index(queue_family_indices.0)
+                .queue_family_index(graphic_family_index)
                 .queue_priorities(&priorities),
             vk::DeviceQueueCreateInfo::default()
-                .queue_family_index(queue_family_indices.1)
+                .queue_family_index(transfer_family_index)
                 .queue_priorities(&priorities),
         ];
 
@@ -182,29 +226,48 @@ impl VulkanCore {
             .queue_create_infos(&queue_infos)
             .enabled_extension_names(&device_extensions);
 
-        let logical_device = unsafe {
-            instance
-                .create_device(physical_device, &device_create_info, None)
-                .expect("failed to create vulkan logical device")
-        };
+        let logical_device =
+            unsafe { instance.create_device(physical_device, &device_create_info, None)? };
 
-        let graphic_queue = unsafe { logical_device.get_device_queue(queue_family_indices.0, 0) };
+        let graphic_queue = unsafe { logical_device.get_device_queue(graphic_family_index, 0) };
 
-        let transfer_queue = unsafe { logical_device.get_device_queue(queue_family_indices.1, 0) };
+        let transfer_queue = unsafe { logical_device.get_device_queue(transfer_family_index, 0) };
 
+        Ok(Device {
+            graphic_queue,
+            transfer_queue,
+            graphic_family_index,
+            transfer_family_index,
+            logical: logical_device,
+            physical: physical_device,
+        })
+    }
+
+    fn create_vulkan_swapchain(
+        window: &Window,
+        instance: &Instance,
+        surface: &Surface,
+        device: &Device,
+    ) -> Result<Swapchain, Box<dyn Error>> {
         let surface_capabilities = unsafe {
-            surface_loader.get_physical_device_surface_capabilities(physical_device, surface)?
+            surface
+                .loader
+                .get_physical_device_surface_capabilities(device.physical, surface.raw)?
         };
 
         let surface_present_modes = unsafe {
-            surface_loader.get_physical_device_surface_present_modes(physical_device, surface)?
+            surface
+                .loader
+                .get_physical_device_surface_present_modes(device.physical, surface.raw)?
         };
 
         let surface_formats = unsafe {
-            surface_loader.get_physical_device_surface_formats(physical_device, surface)?
+            surface
+                .loader
+                .get_physical_device_surface_formats(device.physical, surface.raw)?
         };
 
-        let queue_family = [queue_family_indices.0];
+        let queue_family = [device.graphic_family_index];
 
         let image_count = if surface_capabilities.max_image_count == 0 {
             3.max(surface_capabilities.min_image_count)
@@ -230,7 +293,7 @@ impl VulkanCore {
         };
 
         let swapchain_create_info = vk::SwapchainCreateInfoKHR::default()
-            .surface(surface)
+            .surface(surface.raw)
             .min_image_count(image_count)
             .image_format(surface_formats.first().unwrap().format)
             .image_color_space(surface_formats.first().unwrap().color_space)
@@ -243,7 +306,7 @@ impl VulkanCore {
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
             .present_mode(vk::PresentModeKHR::MAILBOX);
 
-        let swapchain_loader = ash::khr::swapchain::Device::new(&instance, &logical_device);
+        let swapchain_loader = ash::khr::swapchain::Device::new(instance, &device.logical);
 
         let swapchain = unsafe { swapchain_loader.create_swapchain(&swapchain_create_info, None)? };
 
@@ -264,28 +327,18 @@ impl VulkanCore {
                 .view_type(vk::ImageViewType::TYPE_2D)
                 .format(surface_formats.first().unwrap().format)
                 .subresource_range(subresource_range);
-            let images_view =
-                unsafe { logical_device.create_image_view(&images_view_create_info, None) }?;
+            let images_view = unsafe {
+                device
+                    .logical
+                    .create_image_view(&images_view_create_info, None)
+            }?;
             swapchain_images_views.push(images_view);
         }
 
-        Ok(Self {
-            entry,
-            instance,
-            logical_device,
-            debug: DebugUtils {
-                instance: debug_instance,
-                message: debug_message,
-            },
-            surface: Surface {
-                raw: surface,
-                loader: surface_loader,
-            },
-            swapchain: Swapchain {
-                raw: swapchain,
-                loader: swapchain_loader,
-                images_view: swapchain_images_views,
-            },
+        Ok(Swapchain {
+            raw: swapchain,
+            loader: swapchain_loader,
+            images_view: swapchain_images_views,
         })
     }
 }
@@ -294,7 +347,7 @@ impl Drop for VulkanCore {
     fn drop(&mut self) {
         unsafe {
             for image in self.swapchain.images_view.iter() {
-                self.logical_device.destroy_image_view(*image, None);
+                self.device.logical.destroy_image_view(*image, None);
             }
 
             self.swapchain
@@ -307,7 +360,7 @@ impl Drop for VulkanCore {
                 .instance
                 .destroy_debug_utils_messenger(self.debug.message, None);
 
-            self.logical_device.destroy_device(None);
+            self.device.logical.destroy_device(None);
 
             self.instance.destroy_instance(None);
         }
