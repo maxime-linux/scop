@@ -4,14 +4,7 @@
 
 // fn core(vks: &VulkanSetup) {
 //     let attachment = [vk::AttachmentDescription::default()
-//         // .format(
-//         //     vks.surface
-//         //         .raw
-//         //         .get_formats(vks.device.physical)?
-//         //         .first()
-//         //         .unwrap()
-//         //         .format,
-//         // )
+//         .format(vks.surface.format)
 //         .load_op(vk::AttachmentLoadOp::CLEAR)
 //         .store_op(vk::AttachmentStoreOp::STORE)
 //         .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)

@@ -27,11 +27,11 @@ impl Surface {
             )?
         };
 
-        let surface_loader = ash::khr::surface::Instance::new(entry, instance);
+        let loader = ash::khr::surface::Instance::new(entry, instance);
 
         Ok(Self {
             raw: surface,
-            loader: surface_loader,
+            loader,
         })
     }
 }
