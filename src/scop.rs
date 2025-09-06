@@ -4,6 +4,8 @@ use winit::{application::ApplicationHandler, window::Window};
 
 use crate::scop::vulkan_setup::VulkanSetup;
 
+use crate::scop::vulkan_core::VulkanCore;
+
 mod vulkan_core;
 mod vulkan_setup;
 
@@ -11,7 +13,7 @@ mod vulkan_setup;
 pub struct Scop {
     window: Option<Window>,
     vks: Option<VulkanSetup>,
-    // vkc: Option<VulkanCore>,
+    vkc: Option<VulkanCore>,
 }
 
 impl ApplicationHandler for Scop {
@@ -21,11 +23,11 @@ impl ApplicationHandler for Scop {
                 .create_window(Window::default_attributes())
                 .expect("failed to create winit window !");
             let vulkan_setup = VulkanSetup::new(&window).expect("failed to create vulkan setup");
-            // let vulkan_core = VulkanCore::new(&vulkan_setup);
+            let vulkan_core = VulkanCore::new(&vulkan_setup).expect("failed to create vulkan core");
 
             self.window = Some(window);
             self.vks = Some(vulkan_setup);
-            // self.vkc = Some(vulkan_core);
+            self.vkc = Some(vulkan_core);
         }
     }
 
