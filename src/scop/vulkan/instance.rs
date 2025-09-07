@@ -30,9 +30,9 @@ unsafe extern "system" fn vulkan_debug_utils_callback(
 impl Instance {
     pub fn new(window: &Window, entry: &Entry) -> Result<Self, Box<dyn Error>> {
         let app_info: vk::ApplicationInfo = vk::ApplicationInfo::default()
-            .application_name(c"scop")
+            // .application_name(c"scop")
             .application_version(vk::make_api_version(0, 1, 0, 0))
-            .engine_name(c"scop_engine")
+            // .engine_name(c"scop_engine")
             .engine_version(vk::make_api_version(0, 1, 0, 0))
             .api_version(vk::API_VERSION_1_3);
 
@@ -78,5 +78,13 @@ impl Instance {
             debug_utils,
             debug_messenger,
         })
+    }
+
+    pub fn clean(&self) {
+        unsafe {
+            self.debug_utils
+                .destroy_debug_utils_messenger(self.debug_messenger, None)
+        };
+        unsafe { self.raw.destroy_instance(None) };
     }
 }

@@ -4,16 +4,21 @@ use winit::window::Window;
 
 use std::error::Error;
 
-use crate::scop::vulkan_setup::device::Device;
+use crate::scop::vulkan::device::Device;
 
-use crate::scop::vulkan_setup::surface::Surface;
+use crate::scop::vulkan::renderpass::RenderPass;
+
+use crate::scop::vulkan::surface::Surface;
 
 pub struct Swapchain {
     pub raw: vk::SwapchainKHR,
     pub loader: ash::khr::swapchain::Device,
+    pub images: Vec<vk::Image>,
     pub images_view: Vec<vk::ImageView>,
+    pub framebuffers: Vec<vk::Framebuffer>,
     pub format: vk::Format,
     pub color_space: vk::ColorSpaceKHR,
+    pub extent: vk::Extent2D,
 }
 
 impl Swapchain {
@@ -123,9 +128,47 @@ impl Swapchain {
         Ok(Self {
             raw: swapchain,
             loader: swapchain_loader,
+            images: swapchain_images,
             images_view: swapchain_images_views,
             format,
             color_space,
+            framebuffers: Vec::new(),
+            extent: capabilities.current_extent,
         })
+    }
+
+    pub fn create_framebuffers(
+        &mut self,
+        device: &Device,
+        renderpass: &RenderPass,
+    ) -> Result<(), Box<dyn Error>> {
+        for image in self.images_view.iter() {
+            let image_view = [*image];
+            let framebuffer_info = vk::FramebufferCreateInfo::default()
+                .render_pass(renderpass.raw)
+                .attachments(&image_view)
+                .width(self.extent.width)
+                .height(self.extent.width)
+                .layers(1);
+
+            let framebuffer =
+                unsafe { device.logical.create_framebuffer(&framebuffer_info, None)? };
+
+            self.framebuffers.push(framebuffer);
+        }
+        Ok(())
+    }
+
+    pub fn clean(&self, device: &Device) {
+        unsafe {
+            for framebuffer in self.framebuffers.iter() {
+                device.logical.destroy_framebuffer(*framebuffer, None);
+            }
+            for image in self.images_view.iter() {
+                device.logical.destroy_image_view(*image, None);
+            }
+
+            self.loader.destroy_swapchain(self.raw, None)
+        };
     }
 }

@@ -6,12 +6,13 @@ pub struct RenderPass {
     pub raw: vk::RenderPass,
 }
 
-use crate::scop::vulkan_setup::VulkanSetup;
+use crate::scop::vulkan::device::Device;
+use crate::scop::vulkan::swapchain::Swapchain;
 
 impl RenderPass {
-    pub fn new(vks: &VulkanSetup) -> Result<Self, Box<dyn Error>> {
+    pub fn new(device: &Device, swapchain: &Swapchain) -> Result<Self, Box<dyn Error>> {
         let attachments = [vk::AttachmentDescription::default()
-            .format(vks.swapchain.format)
+            .format(swapchain.format)
             .load_op(vk::AttachmentLoadOp::CLEAR)
             .store_op(vk::AttachmentStoreOp::STORE)
             .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
@@ -41,11 +42,7 @@ impl RenderPass {
             .subpasses(&subpasses)
             .dependencies(&dependencies);
 
-        let renderpass = unsafe {
-            vks.device
-                .logical
-                .create_render_pass(&render_pass_info, None)?
-        };
+        let renderpass = unsafe { device.logical.create_render_pass(&render_pass_info, None)? };
 
         Ok(Self { raw: renderpass })
     }

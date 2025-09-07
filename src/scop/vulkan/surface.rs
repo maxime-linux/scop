@@ -34,4 +34,7 @@ impl Surface {
             loader,
         })
     }
+    pub fn clean(&self) {
+        unsafe { self.loader.destroy_surface(self.raw, None) };
+    }
 }

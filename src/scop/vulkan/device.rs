@@ -4,7 +4,7 @@ use std::error::Error;
 
 use std::ffi::c_char;
 
-use crate::scop::vulkan_setup::surface::Surface;
+use crate::scop::vulkan::surface::Surface;
 
 pub struct Device {
     pub graphic_queue: vk::Queue,
@@ -101,5 +101,8 @@ impl Device {
             logical: logical_device,
             physical: physical_device,
         })
+    }
+    pub fn clean(&self) {
+        unsafe { self.logical.destroy_device(None) };
     }
 }

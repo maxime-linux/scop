@@ -9,6 +9,8 @@ all: $(SHADERS_SPV)
 release: $(SHADERS_SPV)
 	cargo run --release
 
+shaders: $(SHADERS_SPV)
+
 $(SHADERS_DIR)%.spv: $(SHADERS_DIR)%
 	glslc $< -o $@
 
@@ -20,4 +22,4 @@ fclean: clean
 
 re: fclean all
 
-.PHONY: all release clean fclean re
+.PHONY: all release clean fclean re shaders
