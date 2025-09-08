@@ -36,8 +36,22 @@ impl Swapchain {
                 .get_physical_device_surface_capabilities(device.physical, surface.raw)?
         };
 
-        // let present_modes =
-        //     unsafe { loader.get_physical_device_surface_present_modes(*physical_device, surface)? };
+        let present_modes = unsafe {
+            surface
+                .loader
+                .get_physical_device_surface_present_modes(device.physical, surface.raw)?
+        };
+
+        let present_mode = present_modes
+            .into_iter()
+            .max_by_key(|mode| match *mode {
+                vk::PresentModeKHR::MAILBOX => 3,
+                vk::PresentModeKHR::IMMEDIATE => 2,
+                vk::PresentModeKHR::FIFO => 1,
+                vk::PresentModeKHR::FIFO_RELAXED => 0,
+                _ => 0,
+            })
+            .expect("no valid vulkan present mode ");
 
         let formats = unsafe {
             surface
@@ -94,7 +108,7 @@ impl Swapchain {
             .queue_family_indices(&queue_family)
             .pre_transform(capabilities.current_transform)
             .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
-            .present_mode(vk::PresentModeKHR::MAILBOX);
+            .present_mode(present_mode);
 
         let swapchain_loader = ash::khr::swapchain::Device::new(instance, &device.logical);
 
@@ -148,7 +162,7 @@ impl Swapchain {
                 .render_pass(renderpass.raw)
                 .attachments(&image_view)
                 .width(self.extent.width)
-                .height(self.extent.width)
+                .height(self.extent.height)
                 .layers(1);
 
             let framebuffer =

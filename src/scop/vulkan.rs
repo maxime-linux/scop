@@ -19,6 +19,9 @@ use crate::scop::vulkan::swapchain::Swapchain;
 mod renderpass;
 use crate::scop::vulkan::renderpass::RenderPass;
 
+mod pipeline;
+use crate::scop::vulkan::pipeline::Pipeline;
+
 pub struct VulkanSetup {
     pub instance: Instance,
     pub surface: Surface,
@@ -36,6 +39,7 @@ impl VulkanSetup {
         let mut swapchain = Swapchain::new(window, &instance.raw, &surface, &device)?;
         let renderpass = RenderPass::new(&device, &swapchain)?;
         swapchain.create_framebuffers(&device, &renderpass)?;
+        Pipeline::new();
         Ok(Self {
             instance,
             surface,

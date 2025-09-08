@@ -17,7 +17,7 @@ pub struct Device {
 
 impl Device {
     pub fn new(instance: &ash::Instance, surface: &Surface) -> Result<Self, Box<dyn Error>> {
-        let (physical_device, physical_device_properties) = {
+        let (physical_device, _physical_device_properties) = {
             let physical_devices = unsafe { instance.enumerate_physical_devices()? };
 
             physical_devices
