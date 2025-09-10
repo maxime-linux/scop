@@ -28,6 +28,7 @@ pub struct VulkanSetup {
     pub device: Device,
     pub swapchain: Swapchain,
     pub renderpass: RenderPass,
+    pub pipeline: Pipeline,
 }
 
 impl VulkanSetup {
@@ -38,20 +39,23 @@ impl VulkanSetup {
         let device = Device::new(&instance.raw, &surface)?;
         let mut swapchain = Swapchain::new(window, &instance.raw, &surface, &device)?;
         let renderpass = RenderPass::new(&device, &swapchain)?;
+        let pipeline = Pipeline::new(&device, &swapchain, &renderpass)?;
         swapchain.create_framebuffers(&device, &renderpass)?;
-        Pipeline::new();
+
         Ok(Self {
             instance,
             surface,
             device,
             swapchain,
             renderpass,
+            pipeline,
         })
     }
 }
 
 impl Drop for VulkanSetup {
     fn drop(&mut self) {
+        self.pipeline.clean(&self.device);
         self.swapchain.clean(&self.device);
         self.surface.clean();
         self.device.clean();

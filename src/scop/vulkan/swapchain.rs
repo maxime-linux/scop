@@ -62,6 +62,9 @@ impl Swapchain {
         let (format, color_space) = {
             formats
                 .iter()
+                .filter(|surface_format| {
+                    surface_format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR
+                })
                 .map(|format| (format.format, format.color_space))
                 .max_by_key(|(format, _)| match *format {
                     vk::Format::B8G8R8A8_SRGB => 2,
@@ -147,7 +150,7 @@ impl Swapchain {
             format,
             color_space,
             framebuffers: Vec::new(),
-            extent: capabilities.current_extent,
+            extent: swapchain_extent,
         })
     }
 

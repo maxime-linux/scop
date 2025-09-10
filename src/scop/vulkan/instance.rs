@@ -20,19 +20,17 @@ unsafe extern "system" fn vulkan_debug_utils_callback(
     callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
     _: *mut c_void,
 ) -> vk::Bool32 {
-    let message = unsafe { CStr::from_ptr((*callback_data).p_message) };
-    let severity = format!("{:?}", msg_severity).to_lowercase();
-    let ty = format!("{:?}", msg_type).to_lowercase();
-    eprintln!("[Debug][{}][{}] {:?}", severity, ty, message);
+    let message = unsafe { CStr::from_ptr((*callback_data).p_message).to_string_lossy() };
+    eprintln!("[DEBUG][{:?}][{:?}] {}", msg_severity, msg_type, message);
     vk::FALSE
 }
 
 impl Instance {
     pub fn new(window: &Window, entry: &Entry) -> Result<Self, Box<dyn Error>> {
         let app_info: vk::ApplicationInfo = vk::ApplicationInfo::default()
-            // .application_name(c"scop")
+            .application_name(c"scop")
             .application_version(vk::make_api_version(0, 1, 0, 0))
-            // .engine_name(c"scop_engine")
+            .engine_name(c"scop_engine")
             .engine_version(vk::make_api_version(0, 1, 0, 0))
             .api_version(vk::API_VERSION_1_3);
 
