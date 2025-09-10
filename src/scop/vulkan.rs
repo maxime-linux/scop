@@ -22,6 +22,9 @@ use crate::scop::vulkan::renderpass::RenderPass;
 mod pipeline;
 use crate::scop::vulkan::pipeline::Pipeline;
 
+mod pools;
+use crate::scop::vulkan::pools::Pools;
+
 pub struct VulkanSetup {
     pub instance: Instance,
     pub surface: Surface,
@@ -29,6 +32,7 @@ pub struct VulkanSetup {
     pub swapchain: Swapchain,
     pub renderpass: RenderPass,
     pub pipeline: Pipeline,
+    pub pools: Pools,
 }
 
 impl VulkanSetup {
@@ -40,6 +44,7 @@ impl VulkanSetup {
         let mut swapchain = Swapchain::new(window, &instance.raw, &surface, &device)?;
         let renderpass = RenderPass::new(&device, &swapchain)?;
         let pipeline = Pipeline::new(&device, &swapchain, &renderpass)?;
+        let pools = Pools::new(&device)?;
         swapchain.create_framebuffers(&device, &renderpass)?;
 
         Ok(Self {
@@ -49,12 +54,14 @@ impl VulkanSetup {
             swapchain,
             renderpass,
             pipeline,
+            pools,
         })
     }
 }
 
 impl Drop for VulkanSetup {
     fn drop(&mut self) {
+        self.pools.clean(&self.device);
         self.pipeline.clean(&self.device);
         self.swapchain.clean(&self.device);
         self.surface.clean();

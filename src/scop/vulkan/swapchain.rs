@@ -28,7 +28,7 @@ impl Swapchain {
         surface: &Surface,
         device: &Device,
     ) -> Result<Self, Box<dyn Error>> {
-        let queue_family = [device.graphic_family_index];
+        let queue_family = [device.graphic_index];
 
         let capabilities = unsafe {
             surface

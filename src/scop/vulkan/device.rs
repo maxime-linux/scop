@@ -9,8 +9,8 @@ use crate::scop::vulkan::surface::Surface;
 pub struct Device {
     pub graphic_queue: vk::Queue,
     pub transfer_queue: vk::Queue,
-    pub graphic_family_index: u32,
-    pub transfer_family_index: u32,
+    pub graphic_index: u32,
+    pub transfer_index: u32,
     pub logical: ash::Device,
     pub physical: vk::PhysicalDevice,
 }
@@ -96,8 +96,8 @@ impl Device {
         Ok(Self {
             graphic_queue,
             transfer_queue,
-            graphic_family_index,
-            transfer_family_index,
+            graphic_index: graphic_family_index,
+            transfer_index: transfer_family_index,
             logical: logical_device,
             physical: physical_device,
         })
