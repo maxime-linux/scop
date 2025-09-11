@@ -5,8 +5,8 @@ use std::error::Error;
 use crate::scop::vulkan::device::Device;
 
 pub struct Pools {
-    graphic: vk::CommandPool,
-    transfer: vk::CommandPool,
+    pub graphic: vk::CommandPool,
+    pub transfer: vk::CommandPool,
 }
 
 impl Pools {

@@ -1,5 +1,3 @@
-use ash::Entry;
-
 use winit::window::Window;
 
 use std::error::Error;
@@ -25,6 +23,9 @@ use crate::scop::vulkan::pipeline::Pipeline;
 mod pools;
 use crate::scop::vulkan::pools::Pools;
 
+mod command_buffer;
+use crate::scop::vulkan::command_buffer::CommandBuffer;
+
 pub struct VulkanSetup {
     pub instance: Instance,
     pub surface: Surface,
@@ -33,11 +34,12 @@ pub struct VulkanSetup {
     pub renderpass: RenderPass,
     pub pipeline: Pipeline,
     pub pools: Pools,
+    pub command_buffers: CommandBuffer,
 }
 
 impl VulkanSetup {
     pub fn new(window: &Window) -> Result<Self, Box<dyn Error>> {
-        let entry = unsafe { Entry::load()? };
+        let entry = unsafe { ash::Entry::load()? };
         let instance = Instance::new(window, &entry)?;
         let surface = Surface::new(window, &entry, &instance.raw)?;
         let device = Device::new(&instance.raw, &surface)?;
@@ -46,6 +48,14 @@ impl VulkanSetup {
         let pipeline = Pipeline::new(&device, &swapchain, &renderpass)?;
         let pools = Pools::new(&device)?;
         swapchain.create_framebuffers(&device, &renderpass)?;
+        let command_buffers = CommandBuffer::new(
+            &pools,
+            &device,
+            &renderpass,
+            &swapchain,
+            &pipeline,
+            swapchain.framebuffers.len(),
+        )?;
 
         Ok(Self {
             instance,
@@ -55,6 +65,7 @@ impl VulkanSetup {
             renderpass,
             pipeline,
             pools,
+            command_buffers,
         })
     }
 }

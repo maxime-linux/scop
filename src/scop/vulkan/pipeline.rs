@@ -23,8 +23,8 @@ fn u8_to_u32_slice(bytes: &[u8]) -> Vec<u32> {
         .collect()
 }
 pub struct Pipeline {
-    raw: vk::Pipeline,
-    layout: vk::PipelineLayout,
+    pub raw: vk::Pipeline,
+    pub layout: vk::PipelineLayout,
 }
 
 impl Pipeline {
