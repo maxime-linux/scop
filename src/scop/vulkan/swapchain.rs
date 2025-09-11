@@ -19,6 +19,11 @@ pub struct Swapchain {
     pub format: vk::Format,
     pub color_space: vk::ColorSpaceKHR,
     pub extent: vk::Extent2D,
+    pub images_available: Vec<vk::Semaphore>,
+    pub rendering_finished: Vec<vk::Semaphore>,
+    pub fences: Vec<vk::Fence>,
+    pub amount_images: u32,
+    pub current_image: usize,
 }
 
 impl Swapchain {
@@ -119,6 +124,8 @@ impl Swapchain {
 
         let swapchain_images = unsafe { swapchain_loader.get_swapchain_images(swapchain)? };
 
+        let amount_images = swapchain_images.len() as u32;
+
         let mut swapchain_images_views = Vec::with_capacity(swapchain_images.len());
 
         for image in swapchain_images.iter() {
@@ -142,6 +149,30 @@ impl Swapchain {
             swapchain_images_views.push(images_view);
         }
 
+        let mut images_available = vec![];
+
+        let mut rendering_finished = vec![];
+
+        let mut fences = vec![];
+
+        let semaphore_info = vk::SemaphoreCreateInfo::default();
+
+        let fence_info = vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
+
+        for _ in 0..amount_images {
+            let semaphore_available =
+                unsafe { device.logical.create_semaphore(&semaphore_info, None)? };
+
+            let semaphore_finished =
+                unsafe { device.logical.create_semaphore(&semaphore_info, None)? };
+
+            let fence = unsafe { device.logical.create_fence(&fence_info, None)? };
+
+            images_available.push(semaphore_available);
+            rendering_finished.push(semaphore_finished);
+            fences.push(fence);
+        }
+
         Ok(Self {
             raw: swapchain,
             loader: swapchain_loader,
@@ -151,6 +182,11 @@ impl Swapchain {
             color_space,
             framebuffers: Vec::new(),
             extent: swapchain_extent,
+            images_available,
+            rendering_finished,
+            amount_images,
+            fences,
+            current_image: 0,
         })
     }
 
@@ -178,6 +214,17 @@ impl Swapchain {
 
     pub fn clean(&self, device: &Device) {
         unsafe {
+            for fence in self.fences.iter() {
+                device.logical.destroy_fence(*fence, None);
+            }
+
+            for semaphore in self.images_available.iter() {
+                device.logical.destroy_semaphore(*semaphore, None);
+            }
+            for semaphore in self.rendering_finished.iter() {
+                device.logical.destroy_semaphore(*semaphore, None);
+            }
+
             for framebuffer in self.framebuffers.iter() {
                 device.logical.destroy_framebuffer(*framebuffer, None);
             }

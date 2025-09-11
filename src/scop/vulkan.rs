@@ -1,5 +1,7 @@
 use winit::window::Window;
 
+use ash::vk;
+
 use std::error::Error;
 
 mod device;
@@ -26,7 +28,7 @@ use crate::scop::vulkan::pools::Pools;
 mod command_buffer;
 use crate::scop::vulkan::command_buffer::CommandBuffer;
 
-pub struct VulkanSetup {
+pub struct Vulkan {
     pub instance: Instance,
     pub surface: Surface,
     pub device: Device,
@@ -37,7 +39,7 @@ pub struct VulkanSetup {
     pub command_buffers: CommandBuffer,
 }
 
-impl VulkanSetup {
+impl Vulkan {
     pub fn new(window: &Window) -> Result<Self, Box<dyn Error>> {
         let entry = unsafe { ash::Entry::load()? };
         let instance = Instance::new(window, &entry)?;
@@ -68,15 +70,95 @@ impl VulkanSetup {
             command_buffers,
         })
     }
+
+    pub fn draw(&mut self) {
+        self.swapchain.current_image =
+            (self.swapchain.current_image + 1) % self.swapchain.amount_images as usize;
+
+        let current_image = self.swapchain.current_image;
+
+        let (image_index, _) = unsafe {
+            self.swapchain
+                .loader
+                .acquire_next_image(
+                    self.swapchain.raw,
+                    u64::MAX,
+                    self.swapchain.images_available[current_image],
+                    vk::Fence::null(),
+                )
+                .expect("failed to get image")
+        };
+
+        unsafe {
+            self.device
+                .logical
+                .wait_for_fences(&[self.swapchain.fences[current_image]], true, u64::MAX)
+                .expect("fence waiting")
+        };
+
+        unsafe {
+            self.device
+                .logical
+                .reset_fences(&[self.swapchain.fences[current_image]])
+                .expect("reset fences")
+        };
+
+        let semaphores_available = [self.swapchain.images_available[current_image]];
+
+        let waiting_stages = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+
+        let semaphores_finished = [self.swapchain.rendering_finished[current_image]];
+
+        let commandbuffers = [self.command_buffers.raw[image_index as usize]];
+
+        let submit_info = [vk::SubmitInfo::default()
+            .wait_semaphores(&semaphores_available)
+            .wait_dst_stage_mask(&waiting_stages)
+            .command_buffers(&commandbuffers)
+            .signal_semaphores(&semaphores_finished)];
+
+        unsafe {
+            self.device
+                .logical
+                .queue_submit(
+                    self.device.graphic_queue,
+                    &submit_info,
+                    self.swapchain.fences[current_image],
+                )
+                .expect("queue submission")
+        };
+
+        let swapchains = [self.swapchain.raw];
+
+        let indices = [image_index];
+
+        let present_info = vk::PresentInfoKHR::default()
+            .wait_semaphores(&semaphores_finished)
+            .swapchains(&swapchains)
+            .image_indices(&indices);
+
+        unsafe {
+            self.swapchain
+                .loader
+                .queue_present(self.device.graphic_queue, &present_info)
+                .expect("queue representation")
+        };
+    }
 }
 
-impl Drop for VulkanSetup {
+impl Drop for Vulkan {
     fn drop(&mut self) {
+        unsafe {
+            self.device
+                .logical
+                .device_wait_idle()
+                .expect("failed to wait device idle")
+        };
         self.pools.clean(&self.device);
         self.pipeline.clean(&self.device);
         self.swapchain.clean(&self.device);
-        self.surface.clean();
         self.device.clean();
+        self.surface.clean();
         self.instance.clean();
     }
 }

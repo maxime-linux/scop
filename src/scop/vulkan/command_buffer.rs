@@ -13,7 +13,7 @@ use crate::scop::vulkan::pipeline::Pipeline;
 use crate::scop::vulkan::pools::Pools;
 
 pub struct CommandBuffer {
-    raw: Vec<vk::CommandBuffer>,
+    pub raw: Vec<vk::CommandBuffer>,
 }
 
 impl CommandBuffer {
@@ -59,6 +59,7 @@ impl CommandBuffer {
                         .extent(swapchain.extent),
                 )
                 .clear_values(&clear_values);
+
             unsafe {
                 device.logical.cmd_begin_render_pass(
                     *command_buffer,

@@ -11,5 +11,8 @@ fn main() {
 
     let mut scop = Scop::new();
 
-    event_loop.run_app(&mut scop);
+    match event_loop.run_app(&mut scop) {
+        Ok(_) => (),
+        Err(err) => eprintln!("error: {err}"),
+    }
 }
