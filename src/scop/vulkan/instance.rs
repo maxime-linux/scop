@@ -36,8 +36,15 @@ impl Instance {
 
         let layer_name: Vec<*const c_char> = vec![c"VK_LAYER_KHRONOS_validation".as_ptr()];
 
-        let mut instance_extensions: Vec<*const c_char> =
-            ash_window::enumerate_required_extensions(window.display_handle()?.as_raw())?.to_vec();
+        let mut instance_extensions: Vec<*const c_char> = vec![];
+
+        let window_extensions =
+            ash_window::enumerate_required_extensions(window.display_handle()?.as_raw())?;
+
+        for extension in window_extensions.iter() {
+            instance_extensions.push(*extension);
+        }
+
         instance_extensions.push(ash::ext::debug_utils::NAME.as_ptr());
 
         let mut debug_create_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
@@ -60,13 +67,9 @@ impl Instance {
             .enabled_layer_names(&layer_name)
             .enabled_extension_names(&instance_extensions);
 
-        let instance = unsafe {
-            entry
-                .create_instance(&instance_create_info, None)
-                .expect("failed to create Vulkan instance!")
-        };
+        let instance = unsafe { entry.create_instance(&instance_create_info, None)? };
 
-        let debug_utils = ash::ext::debug_utils::Instance::new(&entry, &instance);
+        let debug_utils = ash::ext::debug_utils::Instance::new(entry, &instance);
 
         let debug_messenger =
             unsafe { debug_utils.create_debug_utils_messenger(&debug_create_info, None)? };
@@ -81,8 +84,9 @@ impl Instance {
     pub fn clean(&self) {
         unsafe {
             self.debug_utils
-                .destroy_debug_utils_messenger(self.debug_messenger, None)
+                .destroy_debug_utils_messenger(self.debug_messenger, None);
+
+            self.raw.destroy_instance(None)
         };
-        unsafe { self.raw.destroy_instance(None) };
     }
 }

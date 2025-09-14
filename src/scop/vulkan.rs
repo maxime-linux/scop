@@ -156,6 +156,7 @@ impl Drop for Vulkan {
         };
         self.pools.clean(&self.device);
         self.pipeline.clean(&self.device);
+        self.renderpass.clean(&self.device);
         self.swapchain.clean(&self.device);
         self.device.clean();
         self.surface.clean();

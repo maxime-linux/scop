@@ -232,7 +232,7 @@ impl Swapchain {
                 device.logical.destroy_image_view(*image, None);
             }
 
-            self.loader.destroy_swapchain(self.raw, None)
+            self.loader.destroy_swapchain(self.raw, None);
         };
     }
 }

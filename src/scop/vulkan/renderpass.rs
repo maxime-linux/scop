@@ -46,4 +46,8 @@ impl RenderPass {
 
         Ok(Self { raw: renderpass })
     }
+
+    pub fn clean(&self, device: &Device) {
+        unsafe { device.logical.destroy_render_pass(self.raw, None) };
+    }
 }

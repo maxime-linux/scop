@@ -12,7 +12,7 @@ release: $(SHADERS_SPV)
 shaders: $(SHADERS_SPV)
 
 $(SHADERS_DIR)%.spv: $(SHADERS_DIR)%
-	glslc $< -o $@
+	glslangValidator -V $< -o $@
 
 clean:
 	cargo clean
